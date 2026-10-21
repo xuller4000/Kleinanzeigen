@@ -30,12 +30,26 @@ jobs:
             if [ -z "${!v}" ]; then echo "::error::GitHub secret $v fehlt"; exit 1; fi
             # Pasted values easily pick up spaces or extra lines; keep the first non-empty line, trimmed.
             clean=$(printf '%s\n' "${!v}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -m1 .)
-            if [ "$clean" != "${!v}" ]; then echo "::warning::GitHub secret $v enthielt Leerzeichen oder mehrere Zeilen, verwendet wird nur die erste Zeile"; fi
+            if [ "$clean" != "${!v}" ]; then
+              # Only the shape of the value is logged, never its content.
+              shape=$(printf '%s\n' "${!v}" | awk '{ printf "%s%d", (NR > 1 ? ", " : ""), length($0) }')
+              echo "::warning::GitHub secret $v enthielt Leerzeichen oder mehrere Zeilen (Zeichen pro Zeile: $shape), verwendet wird nur die erste Zeile"
+            fi
             echo "::add-mask::$clean"
             echo "$v=$clean" >> "$GITHUB_ENV"
           done
           CONNECTOR_SECRET=$(printf '%s\n' "$CONNECTOR_SECRET" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -m1 .)
           if [ ${#CONNECTOR_SECRET} -lt 24 ]; then echo "::error::CONNECTOR_SECRET muss mindestens 24 Zeichen haben"; exit 1; fi
+
+      - name: Check Cloudflare token
+        run: |
+          # User tokens verify under /user, account-owned tokens under /accounts/<id>.
+          for path in user "accounts/$CLOUDFLARE_ACCOUNT_ID"; do
+            status=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/$path/tokens/verify" | jq -r '.result.status // empty')
+            if [ "$status" = "active" ]; then echo "Token gültig ($path)"; exit 0; fi
+          done
+          echo "::error::Cloudflare kennt das Token nicht (Länge ${#CLOUDFLARE_API_TOKEN} Zeichen, ein Token hat normalerweise 40). Token in Cloudflare neu erstellen und nur den Token-Wert als CLOUDFLARE_API_TOKEN eintragen."
+          exit 1
 
       - run: npx wrangler deploy
       - run: printf '%s' "$CONNECTOR_SECRET" | npx wrangler secret put CONNECTOR_SECRET
