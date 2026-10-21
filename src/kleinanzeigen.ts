@@ -24,10 +24,18 @@ async function kaFetch(path: string): Promise<Response> {
 const clean = (s: string | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
 async function resolveLocation(query: string): Promise<{ id: string; name: string } | null> {
-  const res = await kaFetch(`/s-ort-empfehlungen.json?query=${encodeURIComponent(query)}`);
-  const data = (await res.json()) as Record<string, string>;
-  const first = Object.entries(data).find(([key]) => key !== "_0");
-  return first ? { id: first[0].slice(1), name: first[1] } : null;
+  try {
+    const res = await kaFetch(`/s-ort-empfehlungen.json?query=${encodeURIComponent(query)}`);
+    const data = (await res.json()) as Record<string, string>;
+    const first = Object.entries(data).find(([key]) => key !== "_0");
+    return first ? { id: first[0].slice(1), name: first[1] } : null;
+  } catch {
+    // The JSON endpoint is often blocked for Cloudflare IPs; the search form redirects to a URL carrying the location ID.
+    const params = new URLSearchParams({ keywords: "", locationStr: query, action: "find" });
+    const res = await fetch(`${BASE}/s-suchanfrage.html?${params}`, { headers: HEADERS, redirect: "manual" });
+    const id = (res.headers.get("Location") ?? "").match(/(?:\/|k0)l(\d+)/)?.[1];
+    return id ? { id, name: query } : null;
+  }
 }
 
 interface SearchArgs {
