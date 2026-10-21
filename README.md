@@ -38,6 +38,13 @@ claude.ai → *Einstellungen → Connectors → Custom Connector hinzufügen*:
 
 OAuth-Felder leer lassen.
 
+## Wenn der Deploy scheitert
+
+Der Workflow prüft das Token vor dem Deploy und schreibt ins Log, was nicht stimmt.
+
+- „Cloudflare kennt das Token nicht“: Im Secret steht etwas anderes als das Token, oft eine mitkopierte zweite Zeile oder ein vertauschtes Secret.
+- „das Token sieht 0 Accounts“: Das Token wurde ohne Account erstellt. Mit der Vorlage *Edit Cloudflare Workers* neu anlegen und unter *Account Resources* den eigenen Account auswählen.
+
 ## Grenzen
 
 Kleinanzeigen sperrt viele Rechenzentrums-IPs. Von Cloudflare aus hat es bisher funktioniert, garantiert ist das nicht; bei einer Sperre kommt eine klare Fehlermeldung (HTTP 403) statt leerer Ergebnisse. Die Nutzungsbedingungen von Kleinanzeigen untersagen automatisierte Abfragen. Für gelegentliche private Suchen ist das Risiko gering, als Dauer-Suchbot sollte man ihn nicht laufen lassen.
