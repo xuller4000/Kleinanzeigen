@@ -46,10 +46,25 @@ jobs:
           # User tokens verify under /user, account-owned tokens under /accounts/<id>.
           for path in user "accounts/$CLOUDFLARE_ACCOUNT_ID"; do
             status=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/$path/tokens/verify" | jq -r '.result.status // empty')
-            if [ "$status" = "active" ]; then echo "Token gültig ($path)"; exit 0; fi
+            if [ "$status" = "active" ]; then echo "Token gültig ($path)"; ok=1; break; fi
           done
-          echo "::error::Cloudflare kennt das Token nicht (Länge ${#CLOUDFLARE_API_TOKEN} Zeichen, ein Token hat normalerweise 40). Token in Cloudflare neu erstellen und nur den Token-Wert als CLOUDFLARE_API_TOKEN eintragen."
-          exit 1
+          if [ -z "$ok" ]; then
+            echo "::error::Cloudflare kennt das Token nicht (Länge ${#CLOUDFLARE_API_TOKEN} Zeichen, ein Token hat normalerweise 40). Token in Cloudflare neu erstellen und nur den Token-Wert als CLOUDFLARE_API_TOKEN eintragen."
+            exit 1
+          fi
+          # The account ID has to be one the token was created for.
+          ids=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=50" | jq -r '.result[]?.id')
+          count=$(printf '%s\n' "$ids" | grep -c . || true)
+          if printf '%s\n' "$ids" | grep -qx "$CLOUDFLARE_ACCOUNT_ID"; then
+            echo "Account-ID passt zum Token"
+          elif [ "$count" = 1 ]; then
+            echo "::warning::CLOUDFLARE_ACCOUNT_ID passt nicht zum Token, verwendet wird der einzige Account, auf den das Token Zugriff hat. Bitte das Secret korrigieren."
+            echo "::add-mask::$ids"
+            echo "CLOUDFLARE_ACCOUNT_ID=$ids" >> "$GITHUB_ENV"
+          else
+            echo "::error::CLOUDFLARE_ACCOUNT_ID passt nicht zum Token (das Token sieht $count Accounts). Account-ID im Cloudflare-Dashboard prüfen oder beim Token den richtigen Account auswählen."
+            exit 1
+          fi
 
       - run: npx wrangler deploy
       - run: printf '%s' "$CONNECTOR_SECRET" | npx wrangler secret put CONNECTOR_SECRET
